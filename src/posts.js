@@ -118,49 +118,56 @@ var db = require('./database'),
 
 	Posts.reply = function(tid, uid, content, callback) {
 		threadTools.privileges(tid, uid, function(err, privileges) {
-			if (content) {
-				content = content.trim();
-			}
+			threadTools.getCategoryAccess(tid, uid, '+gw', function(err, access){
+				// category access per user group 
+				if (access){
+					if (content) {
+						content = content.trim();
+					}
 
-			if (!content || content.length < meta.config.minimumPostLength) {
-				return callback(new Error('content-too-short'));
-			} else if (!privileges.write) {
-				return callback(new Error('no-privileges'));
-			}
+					if (!content || content.length < meta.config.minimumPostLength) {
+						return callback(new Error('content-too-short'));
+					} else if (!privileges.write) {
+						return callback(new Error('no-privileges'));
+					}
 
-			Posts.create(uid, tid, content, function(err, postData) {
-				if(err) {
-					return callback(err, null);
-				} else if(!postData) {
-					callback(new Error('reply-error'), null);
+					Posts.create(uid, tid, content, function(err, postData) {
+						if(err) {
+							return callback(err, null);
+						} else if(!postData) {
+							callback(new Error('reply-error'), null);
+						}
+
+						Posts.getCidByPid(postData.pid, function(err, cid) {
+							if(err) {
+								return callback(err, null);
+							}
+
+							db.delete('cid:' + cid + ':read_by_uid');
+						});
+
+						topics.markAsUnreadForAll(tid, function(err) {
+							if(err) {
+								return callback(err, null);
+							}
+
+							topics.markAsRead(tid, uid);
+							topics.pushUnreadCount();
+						});
+
+						threadTools.notifyFollowers(tid, uid);
+
+						Posts.addUserInfoToPost(postData, function(err) {
+							if(err) {
+								return callback(err, null);
+							}
+
+							callback(null, postData);
+						});
+					});
+				} else {
+					return callback(new Error('no-privileges'));
 				}
-
-				Posts.getCidByPid(postData.pid, function(err, cid) {
-					if(err) {
-						return callback(err, null);
-					}
-
-					db.delete('cid:' + cid + ':read_by_uid');
-				});
-
-				topics.markAsUnreadForAll(tid, function(err) {
-					if(err) {
-						return callback(err, null);
-					}
-
-					topics.markAsRead(tid, uid);
-					topics.pushUnreadCount();
-				});
-
-				threadTools.notifyFollowers(tid, uid);
-
-				Posts.addUserInfoToPost(postData, function(err) {
-					if(err) {
-						return callback(err, null);
-					}
-
-					callback(null, postData);
-				});
 			});
 		});
 	}

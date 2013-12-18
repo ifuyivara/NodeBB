@@ -9,6 +9,7 @@ var async = require('async'),
 	user = require('./user'),
 	categories = require('./categories'),
 	categoryTools = require('./categoryTools'),
+	groups = require('./groups'),
 	posts = require('./posts'),
 	threadTools = require('./threadTools'),
 	postTools = require('./postTools'),
@@ -26,101 +27,110 @@ var async = require('async'),
 
 		categoryTools.privileges(cid, uid, function(err, privileges) {
 
-			if(err) {
-				return callback(err);
-			} else if(!privileges.write) {
-				return callback(new Error('no-privileges'));
-			} else if (!cid) {
-				return callback(new Error('invalid-cid'));
-			} else if (!title || title.length < meta.config.minimumTitleLength) {
-				return callback(new Error('title-too-short'), null);
-			} else if (!content || content.length < meta.config.miminumPostLength) {
-				return callback(new Error('content-too-short'), null);
-			}
-
-			if (content) {
-				content = content.trim();
-			}
-			if (title) {
-				title = title.trim();
-			}
-
-			user.getUserField(uid, 'lastposttime', function(err, lastposttime) {
-				if (err) {
-					return callback(err);
-				}
-
-				if(!lastposttime) {
-					lastposttime = 0;
-				}
-
-				if (Date.now() - lastposttime < meta.config.postDelay * 1000) {
-					return callback(new Error('too-many-posts'), null);
-				}
-
-				db.incrObjectField('global', 'nextTid', function(err, tid) {
+			groups.getCategoryAccess(cid, uid, '+gw', function(err, access){
+				// category access per user group 
+				if (access){
 					if(err) {
 						return callback(err);
+					} else if(!privileges.write) {
+						return callback(new Error('no-privileges'));
+					} else if (!cid) {
+						return callback(new Error('invalid-cid'));
+					} else if (!title || title.length < meta.config.minimumTitleLength) {
+						return callback(new Error('title-too-short'), null);
+					} else if (!content || content.length < meta.config.miminumPostLength) {
+						return callback(new Error('content-too-short'), null);
 					}
 
-					db.setAdd('topics:tid', tid);
+					if (content) {
+						content = content.trim();
+					}
+					if (title) {
+						title = title.trim();
+					}
 
-					var slug = tid + '/' + utils.slugify(title);
-					var timestamp = Date.now();
-					db.setObject('topic:' + tid, {
-						'tid': tid,
-						'uid': uid,
-						'cid': cid,
-						'title': title,
-						'slug': slug,
-						'timestamp': timestamp,
-						'lastposttime': 0,
-						'postcount': 0,
-						'viewcount': 0,
-						'locked': 0,
-						'deleted': 0,
-						'pinned': 0
-					});
-
-					db.searchIndex('topic', title, tid);
-
-					user.addTopicIdToUser(uid, tid);
-
-					// let everyone know that there is an unread topic in this category
-					db.delete('cid:' + cid + ':read_by_uid', function(err, data) {
-						Topics.markAsRead(tid, uid);
-					});
-
-					// in future it may be possible to add topics to several categories, so leaving the door open here.
-					db.sortedSetAdd('categories:' + cid + ':tid', timestamp, tid);
-					db.incrObjectField('category:' + cid, 'topic_count');
-					db.incrObjectField('global', 'topicCount');
-
-					feed.updateCategory(cid);
-
-					posts.create(uid, tid, content, function(err, postData) {
-						if(err) {
-							return callback(err, null);
-						} else if(!postData) {
-							return callback(new Error('invalid-post'), null);
+					user.getUserField(uid, 'lastposttime', function(err, lastposttime) {
+						if (err) {
+							return callback(err);
 						}
 
-						// Auto-subscribe the post creator to the newly created topic
-						threadTools.toggleFollow(tid, uid);
+						if(!lastposttime) {
+							lastposttime = 0;
+						}
 
-						Topics.pushUnreadCount();
+						if (Date.now() - lastposttime < meta.config.postDelay * 1000) {
+							return callback(new Error('too-many-posts'), null);
+						}
 
-						Topics.getTopicForCategoryView(tid, uid, function(topicData) {
-							topicData.unreplied = 1;
+						db.incrObjectField('global', 'nextTid', function(err, tid) {
+							if(err) {
+								return callback(err);
+							}
 
-							callback(null, {
-								topicData: topicData,
-								postData: postData
+							db.setAdd('topics:tid', tid);
+
+							var slug = tid + '/' + utils.slugify(title);
+							var timestamp = Date.now();
+							db.setObject('topic:' + tid, {
+								'tid': tid,
+								'uid': uid,
+								'cid': cid,
+								'title': title,
+								'slug': slug,
+								'timestamp': timestamp,
+								'lastposttime': 0,
+								'postcount': 0,
+								'viewcount': 0,
+								'locked': 0,
+								'deleted': 0,
+								'pinned': 0
+							});
+
+							db.searchIndex('topic', title, tid);
+
+							user.addTopicIdToUser(uid, tid);
+
+							// let everyone know that there is an unread topic in this category
+							db.delete('cid:' + cid + ':read_by_uid', function(err, data) {
+								Topics.markAsRead(tid, uid);
+							});
+
+							// in future it may be possible to add topics to several categories, so leaving the door open here.
+							db.sortedSetAdd('categories:' + cid + ':tid', timestamp, tid);
+							db.incrObjectField('category:' + cid, 'topic_count');
+							db.incrObjectField('global', 'topicCount');
+
+							feed.updateCategory(cid);
+
+							posts.create(uid, tid, content, function(err, postData) {
+								if(err) {
+									return callback(err, null);
+								} else if(!postData) {
+									return callback(new Error('invalid-post'), null);
+								}
+
+								// Auto-subscribe the post creator to the newly created topic
+								threadTools.toggleFollow(tid, uid);
+
+								Topics.pushUnreadCount();
+
+								Topics.getTopicForCategoryView(tid, uid, function(topicData) {
+									topicData.unreplied = 1;
+
+									callback(null, {
+										topicData: topicData,
+										postData: postData
+									});
+								});
 							});
 						});
-					});
-				});
+					});		
+					
+				} else {
+					return callback(new Error('no-privileges'));	
+				}
 			});
+			
 		});
 	};
 

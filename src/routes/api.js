@@ -124,7 +124,7 @@ var path = require('path'),
 						}
 						// get the category this post belongs to and check category access
 						var cid = data.category_slug.split("/")[0];
-						groups.getCategoryAccess(cid, uid, function(err, access){
+						groups.getCategoryAccess(cid, uid, '+gr', function(err, access){
 							if (access){
 								res.json(data);
 							} else {
@@ -141,7 +141,7 @@ var path = require('path'),
 				// Category Whitelisting
 				categoryTools.privileges(req.params.id, uid, function(err, privileges) {
 					if (!err && privileges.read) {
-						groups.getCategoryAccess(req.params.id, uid, function(err, access){
+						groups.getCategoryAccess(req.params.id, uid, '+gr', function(err, access){
 							if (access){
 								categories.getCategoryById(req.params.id, uid, function (err, data) {
 									if (!err && data && parseInt(data.disabled, 10) === 0) {

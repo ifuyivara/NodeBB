@@ -8,6 +8,7 @@ var db = require('./database'),
 	posts = require('./posts'),
 	meta = require('./meta'),
 	websockets = require('./websockets');
+	groups = require('./groups'),
 	winston = require('winston'),
 	nconf = require('nconf'),
 
@@ -305,6 +306,13 @@ var db = require('./database'),
 				} else {
 					callback(new Error('no-undeleted-pids-found'));
 				}
+			});
+		});
+	}
+	ThreadTools.getCategoryAccess = function(tid, uid, group, callback){
+		topics.getTopicField(tid, 'cid', function(err, cid) {
+			groups.getCategoryAccess(cid, uid, group, function(err, access){
+			  callback(err, access);	
 			});
 		});
 	}

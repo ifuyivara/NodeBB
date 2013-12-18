@@ -263,13 +263,13 @@
 		});
 	};
 
-	Groups.getCategoryAccess = function(cid, uid, callback){
+	Groups.getCategoryAccess = function(cid, uid, group, callback){
 		var access = false;
-		// check user group read access level
+		// check user group read or write access level
 		async.series([function(callback){
-			// get groups with read permission
-			db.getObjectField('group:gid', 'cid:' + cid + ':privileges:+gr', function(err, gid){
-				// get the user groups that belong to this read group
+			// get groups with read or write permission
+			db.getObjectField('group:gid', 'cid:' + cid + ':privileges:'+group, function(err, gid){
+				// get the user groups that belong to this read/write group
 				db.getSetMembers('gid:' + gid + ':members', function (err, gids) {
 					// check if user belong to any of these user groups
 					var groups_check = new Array();
@@ -293,7 +293,7 @@
 		
 		}],
 		function(err, results){
-			// if the read group is empty we will asume that read access has been granted to ALL
+			// if the read/write group is empty we will asume that read/write access has been granted to ALL
 			if (results[0].length == 0){ access = true; }
 			callback(false, access);
 		});
